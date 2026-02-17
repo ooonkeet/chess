@@ -951,6 +951,7 @@ function App() {
     })
 
     return () => {
+      socket.off('connect')
       socket.off('room_created')
       socket.off('room_joined')
       socket.off('game_start')
