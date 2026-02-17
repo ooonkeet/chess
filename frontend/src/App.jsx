@@ -222,6 +222,11 @@ function App() {
   const [chatInput, setChatInput] = useState('')
   const chatEndRef = useRef(null)
   const [copied, setCopied] = useState(false)
+  const myColorRef = useRef(myColor)
+
+  useEffect(() => {
+    myColorRef.current = myColor
+  }, [myColor])
 
   const theme = THEMES[currentTheme].colors
 
@@ -953,6 +958,12 @@ function App() {
       setMessages(prev => [...prev, data])
     })
 
+    socket.on('opponent_disconnected', () => {
+      setGameOver(true)
+      setWinner(myColorRef.current)
+      alert('Opponent disconnected! You win!')
+    })
+
     socket.on('error', (message) => {
       alert(message)
     })
@@ -965,6 +976,7 @@ function App() {
       socket.off('game_start')
       socket.off('receive_move')
       socket.off('receive_message')
+      socket.off('opponent_disconnected')
       socket.off('error')
     }
   }, [])
