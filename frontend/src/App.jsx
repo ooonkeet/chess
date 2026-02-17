@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { io } from 'socket.io-client'
 
-const socket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001', { autoConnect: false })
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+console.log('Frontend connecting to:', SERVER_URL);
+const socket = io(SERVER_URL, { autoConnect: false })
 
 const THEMES = {
   pookie: {
@@ -914,6 +916,11 @@ function App() {
   useEffect(() => {
     socket.on('connect', () => console.log('Connected to server'))
     
+    socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      alert('Connection failed! Check console for details.\nEnsure VITE_SERVER_URL is correct and Backend is running.');
+    });
+    
     socket.on('room_created', ({ roomId, color }) => {
       setRoomId(roomId)
       setMyColor(color)
@@ -952,6 +959,7 @@ function App() {
 
     return () => {
       socket.off('connect')
+      socket.off('connect_error')
       socket.off('room_created')
       socket.off('room_joined')
       socket.off('game_start')
