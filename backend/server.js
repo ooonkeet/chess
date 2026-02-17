@@ -12,12 +12,9 @@ app.get('/', (req, res) => {
 
 const server = http.createServer(app);
 
-const allowedOrigin = process.env.CLIENT_URL || "http://localhost:5173";
-console.log("Allowed CORS Origin:", allowedOrigin);
-
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigin,
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
