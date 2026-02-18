@@ -284,6 +284,7 @@ function App() {
   const [chatInput, setChatInput] = useState('')
   const chatEndRef = useRef(null)
   const [copied, setCopied] = useState(false)
+  const [creationColor, setCreationColor] = useState('white')
   const myColorRef = useRef(myColor)
   
   // New State for Rules
@@ -772,6 +773,14 @@ function App() {
     .last-move {
       background: rgba(255, 255, 0, 0.3) !important;
     }
+    .piece.glow {
+      animation: pulseGlow 1.5s ease-in-out infinite alternate;
+    }
+    @keyframes pulseGlow {
+      from { filter: drop-shadow(0 0 2px var(--text)); }
+      to { filter: drop-shadow(0 0 15px var(--text)); }
+    }
+
     .light { background: var(--board-light); }
     .dark { background: var(--board-dark); }
     
@@ -1271,6 +1280,7 @@ function App() {
         const isPossibleMove = possibleMoves.some(m => m.r === r && m.c === c)
         const isCapture = isPossibleMove && (board[r][c] || (selected && board[selected.r][selected.c].type === '♟' && Math.abs(c - selected.c) === 1 && !board[r][c])) // Highlight en passant as capture
         const isLastMove = lastMove && ((lastMove.from.r === r && lastMove.from.c === c) || (lastMove.to.r === r && lastMove.to.c === c))
+        const shouldGlow = piece && piece.color === turn && !gameOver
         
         squares.push(
           <div 
@@ -1278,7 +1288,7 @@ function App() {
             className={`square ${isDark ? 'dark' : 'light'} ${isSelected ? 'selected' : ''} ${isLastMove ? 'last-move' : ''}`}
             onClick={() => handleSquareClick(r, c)}
           >
-            {piece && <span className={`piece ${piece.color}`}>{piece.type}</span>}
+            {piece && <span className={`piece ${piece.color} ${shouldGlow ? 'glow' : ''}`}>{piece.type}</span>}
             {isPossibleMove && !isCapture && <div className="move-dot"></div>}
             {isPossibleMove && isCapture && <div className="move-ring"></div>}
           </div>
@@ -1348,9 +1358,33 @@ function App() {
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.3)', flex: 1 }}></div>
               </div>
 
+              <div style={{ margin: '15px 0', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ opacity: 0.8, fontSize: '0.9rem' }}>Play as:</span>
+                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', padding: '4px' }}>
+                  <button 
+                    style={{ 
+                      background: creationColor === 'white' ? 'var(--text)' : 'transparent',
+                      color: creationColor === 'white' ? 'var(--bg-solid)' : 'var(--text)',
+                      border: 'none', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+                      transition: 'all 0.2s'
+                    }}
+                    onClick={() => setCreationColor('white')}
+                  >White</button>
+                  <button 
+                    style={{ 
+                      background: creationColor === 'black' ? 'var(--text)' : 'transparent',
+                      color: creationColor === 'black' ? 'var(--bg-solid)' : 'var(--text)',
+                      border: 'none', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+                      transition: 'all 0.2s'
+                    }}
+                    onClick={() => setCreationColor('black')}
+                  >Black</button>
+                </div>
+              </div>
+
               <button className="theme-btn" onClick={() => {
                 socket.connect()
-                socket.emit('create_room')
+                socket.emit('create_room', creationColor)
               }}>Create Room</button>
               
               <div style={{ display: 'flex', gap: '10px' }}>

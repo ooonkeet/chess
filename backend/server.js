@@ -24,17 +24,19 @@ const rooms = new Map();
 io.on('connection', (socket) => {
   console.log(`User Connected: ${socket.id}`);
 
-  socket.on('create_room', () => {
+  socket.on('create_room', (preferredColor) => {
     let roomId;
     // Ensure the room ID is unique to prevent double booking
     do {
       roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     } while (rooms.has(roomId));
 
-    rooms.set(roomId, { players: [socket.id] });
+    const color = preferredColor === 'black' ? 'black' : 'white';
+
+    rooms.set(roomId, { players: [socket.id], colors: { [socket.id]: color } });
     socket.join(roomId);
-    socket.emit('room_created', { roomId, color: 'white' });
-    console.log(`Room created: ${roomId}`);
+    socket.emit('room_created', { roomId, color });
+    console.log(`Room created: ${roomId} with color ${color}`);
   });
 
   socket.on('join_room', (roomId) => {
@@ -42,8 +44,14 @@ io.on('connection', (socket) => {
       const room = rooms.get(roomId);
       if (room.players.length < 2) {
         room.players.push(socket.id);
+        
+        const firstPlayerId = room.players[0];
+        const firstPlayerColor = room.colors[firstPlayerId];
+        const joinerColor = firstPlayerColor === 'white' ? 'black' : 'white';
+        room.colors[socket.id] = joinerColor;
+
         socket.join(roomId);
-        socket.emit('room_joined', { roomId, color: 'black' });
+        socket.emit('room_joined', { roomId, color: joinerColor });
         io.to(roomId).emit('game_start', { roomId });
         console.log(`User joined room: ${roomId}`);
       } else {
