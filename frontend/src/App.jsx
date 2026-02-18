@@ -931,7 +931,7 @@ function App() {
     .message.self {
       align-self: flex-end;
       background: var(--primary);
-      color: var(--bg-solid);
+      color: var(--text);
       border-bottom-right-radius: 2px;
     }
     .message.opponent {
