@@ -299,6 +299,23 @@ function App() {
     myColorRef.current = myColor
   }, [myColor])
 
+  const resetGame = () => {
+    setBoard(createBoard())
+    setTurn('white')
+    setSelected(null)
+    setPossibleMoves([])
+    setCaptured({ white: [], black: [] })
+    setInCheck(false)
+    setGameOver(false)
+    setWinner(null)
+    setLastMove(null)
+    setCastlingRights({
+      white: { kingSide: true, queenSide: true },
+      black: { kingSide: true, queenSide: true }
+    })
+    setPromotionSquare(null)
+  }
+
   const theme = THEMES[currentTheme].colors
 
   // Dynamic CSS based on selected theme
@@ -775,10 +792,11 @@ function App() {
     }
     .piece.glow {
       animation: pulseGlow 1.5s ease-in-out infinite alternate;
+      text-shadow: 0 0 5px var(--text);
     }
     @keyframes pulseGlow {
-      from { filter: drop-shadow(0 0 2px var(--text)); }
-      to { filter: drop-shadow(0 0 15px var(--text)); }
+      from { filter: drop-shadow(0 0 2px var(--text)); text-shadow: 0 0 5px var(--text); }
+      to { filter: drop-shadow(0 0 15px var(--text)); text-shadow: 0 0 20px var(--text); }
     }
 
     .light { background: var(--board-light); }
@@ -855,6 +873,23 @@ function App() {
       color: #333;
     }
 
+    .room-info {
+      background: rgba(0, 0, 0, 0.6);
+      padding: 15px;
+      border-radius: 15px;
+      margin-top: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      backdrop-filter: blur(5px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .room-info-text {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      letter-spacing: 1px;
+    }
+
     .chat-container {
       width: 100%;
       max-width: 600px;
@@ -883,6 +918,8 @@ function App() {
       word-wrap: break-word;
       font-size: 0.9rem;
       animation: popIn 0.3s ease;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     }
     .message.self {
       align-self: flex-end;
@@ -907,10 +944,12 @@ function App() {
       padding: 10px 15px;
       border-radius: 20px;
       border: 1px solid rgba(255,255,255,0.1);
-      background: rgba(255,255,255,0.05);
+      background: rgba(0,0,0,0.3);
       color: var(--text);
       font-family: inherit;
       outline: none;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
     .chat-input:focus {
       background: rgba(255,255,255,0.1);
@@ -1331,23 +1370,10 @@ function App() {
 
             <div className="online-controls">
               <button className="start-btn" onClick={() => {
-                setBoard(createBoard())
-                setTurn('white')
-                setSelected(null)
-                setPossibleMoves([])
-                setCaptured({ white: [], black: [] })
-                setInCheck(false)
-                setGameOver(false)
-                setWinner(null)
+                resetGame()
                 setMessages([])
                 setIsOnline(false)
                 setGameStarted(true)
-                setLastMove(null)
-                setCastlingRights({
-                  white: { kingSide: true, queenSide: true },
-                  black: { kingSide: true, queenSide: true }
-                })
-                setPromotionSquare(null)
               }}>
                 Play Local
               </button>
@@ -1383,6 +1409,7 @@ function App() {
               </div>
 
               <button className="theme-btn" onClick={() => {
+                resetGame()
                 socket.connect()
                 socket.emit('create_room', creationColor)
               }}>Create Room</button>
@@ -1396,6 +1423,7 @@ function App() {
                 />
                 <button className="theme-btn" onClick={() => {
                   if (roomInput) {
+                    resetGame()
                     socket.connect()
                     socket.emit('join_room', roomInput)
                   }
@@ -1414,6 +1442,7 @@ function App() {
                   setIsOnline(false)
                   setOpponentJoined(false)
                   setMessages([])
+                  resetGame()
                   socket.disconnect()
                 }}
               >
@@ -1430,8 +1459,11 @@ function App() {
                   }
                 </span>
                 {isOnline && (
-                  <div style={{ fontSize: '0.8rem', marginTop: '5px', color: 'var(--primary)' }}>
-                    ROOM: {roomId} | YOU ARE: {myColor?.toUpperCase()}
+                  <div className="room-info">
+                    <div className="room-info-text">ROOM: {roomId}</div>
+                    <div className="room-info-text" style={{ fontSize: '0.9rem', marginTop: '5px', opacity: 0.9 }}>
+                      YOU ARE: {myColor?.toUpperCase()}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1525,21 +1557,8 @@ function App() {
                   <h2 className="winner-text">{winner} WINS!</h2>
                   <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
                     <button className="start-btn" style={{ fontSize: '1rem', padding: '15px 30px' }} onClick={() => {
-                      setBoard(createBoard())
-                      setTurn('white')
-                      setSelected(null)
-                      setPossibleMoves([])
-                      setCaptured({ white: [], black: [] })
-                      setInCheck(false)
-                      setGameOver(false)
-                      setWinner(null)
+                      resetGame()
                       setMessages([])
-                      setLastMove(null)
-                      setCastlingRights({
-                        white: { kingSide: true, queenSide: true },
-                        black: { kingSide: true, queenSide: true }
-                      })
-                      setPromotionSquare(null)
                       if (isOnline) {
                         // Logic to restart online game would go here (e.g. emit 'rematch')
                       }
@@ -1550,6 +1569,7 @@ function App() {
                       setGameStarted(false)
                       setIsOnline(false)
                       setMessages([])
+                      resetGame()
                       socket.disconnect()
                     }}>
                       Exit Menu
