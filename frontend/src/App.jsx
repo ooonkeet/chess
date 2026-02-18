@@ -769,6 +769,9 @@ function App() {
       box-shadow: inset 0 0 15px var(--primary);
       border: 2px solid var(--primary);
     }
+    .last-move {
+      background: rgba(255, 255, 0, 0.3) !important;
+    }
     .light { background: var(--board-light); }
     .dark { background: var(--board-dark); }
     
@@ -1059,6 +1062,18 @@ function App() {
       alert(message)
     })
 
+    socket.on('room_full', () => {
+      alert('Room is full!')
+      setGameStarted(false)
+      setIsOnline(false)
+    })
+
+    socket.on('invalid_room', () => {
+      alert('Invalid Room ID!')
+      setGameStarted(false)
+      setIsOnline(false)
+    })
+
     return () => {
       socket.off('connect')
       socket.off('connect_error')
@@ -1069,6 +1084,8 @@ function App() {
       socket.off('receive_message')
       socket.off('opponent_disconnected')
       socket.off('error')
+      socket.off('room_full')
+      socket.off('invalid_room')
     }
   }, [])
 
@@ -1094,9 +1111,12 @@ function App() {
     setPromotionSquare(null)
   }
 
-  const finalizeMove = (newBoard, currentTurn) => {
+  const finalizeMove = (newBoard, currentTurn, explicitCaptured = null, explicitLastMove = null) => {
     const nextTurn = currentTurn === 'white' ? 'black' : 'white'
     
+    const finalCaptured = explicitCaptured || captured
+    const finalLastMove = explicitLastMove || lastMove
+
     // Check opponent status
     const check = isKingInCheck(newBoard, nextTurn)
     let mate = false
@@ -1131,8 +1151,8 @@ function App() {
         inCheck: check,
         gameOver: mate,
         winner: mate ? currentTurn : null,
-        captured: captured,
-        lastMove: lastMove,
+        captured: finalCaptured,
+        lastMove: finalLastMove,
         castlingRights: castlingRights
       })
     }
@@ -1166,17 +1186,14 @@ function App() {
       if (isValidMove(selected, { r, c }, board, lastMove, castlingRights)) {
         // Simulate move to check for self-check
         const tempBoard = board.map(row => row.map(p => p ? { ...p } : null))
+        const nextCaptured = { white: [...captured.white], black: [...captured.black] }
         
         // Handle En Passant Capture
         if (selectedPiece.type === '♟' && Math.abs(c - selected.c) === 1 && !targetPiece) {
            // Remove captured pawn
            tempBoard[selected.r][c] = null
            // Add to captured list
-           const capturedPawnColor = turn === 'white' ? 'black' : 'white'
-           setCaptured(prev => ({
-             ...prev,
-             [turn]: [...prev[turn], '♟']
-           }))
+           nextCaptured[turn].push('♟')
         }
 
         // Handle Castling Move
@@ -1215,11 +1232,9 @@ function App() {
 
         // Check for capture (standard)
         if (targetPiece) {
-          setCaptured(prev => ({
-            ...prev,
-            [turn]: [...prev[turn], targetPiece.type]
-          }))
+          nextCaptured[turn].push(targetPiece.type)
         }
+        setCaptured(nextCaptured)
 
         // Update Last Move
         const moveData = { from: selected, to: { r, c }, piece: selectedPiece }
@@ -1233,7 +1248,7 @@ function App() {
         }
 
         // Commit Move
-        finalizeMove(tempBoard, turn)
+        finalizeMove(tempBoard, turn, nextCaptured, moveData)
       }
     } else {
       // Select logic
@@ -1255,11 +1270,12 @@ function App() {
         const isSelected = selected?.r === r && selected?.c === c
         const isPossibleMove = possibleMoves.some(m => m.r === r && m.c === c)
         const isCapture = isPossibleMove && (board[r][c] || (selected && board[selected.r][selected.c].type === '♟' && Math.abs(c - selected.c) === 1 && !board[r][c])) // Highlight en passant as capture
+        const isLastMove = lastMove && ((lastMove.from.r === r && lastMove.from.c === c) || (lastMove.to.r === r && lastMove.to.c === c))
         
         squares.push(
           <div 
             key={`${r}-${c}`} 
-            className={`square ${isDark ? 'dark' : 'light'} ${isSelected ? 'selected' : ''}`}
+            className={`square ${isDark ? 'dark' : 'light'} ${isSelected ? 'selected' : ''} ${isLastMove ? 'last-move' : ''}`}
             onClick={() => handleSquareClick(r, c)}
           >
             {piece && <span className={`piece ${piece.color}`}>{piece.type}</span>}
