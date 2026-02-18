@@ -1204,24 +1204,25 @@ function App() {
     setPromotionSquare(null)
   }
 
-  const finalizeMove = (newBoard, currentTurn, explicitCaptured = null, explicitLastMove = null) => {
+  const finalizeMove = (newBoard, currentTurn, explicitCaptured = null, explicitLastMove = null, explicitCastlingRights = null) => {
     const nextTurn = currentTurn === 'white' ? 'black' : 'white'
     
     const finalCaptured = explicitCaptured || captured
     const finalLastMove = explicitLastMove || lastMove
+    const finalCastlingRights = explicitCastlingRights || castlingRights
 
     // Check opponent status
     const check = isKingInCheck(newBoard, nextTurn)
     let mate = false
+    let stalemate = false
     
     if (check) {
-      if (!hasLegalMoves(newBoard, nextTurn, lastMove, castlingRights)) {
+      if (!hasLegalMoves(newBoard, nextTurn, finalLastMove, finalCastlingRights)) {
         mate = true
       }
     } else {
-      // Stalemate check could go here
-      if (!hasLegalMoves(newBoard, nextTurn, lastMove, castlingRights)) {
-        // Stalemate logic (optional, for now just no moves but not check)
+      if (!hasLegalMoves(newBoard, nextTurn, finalLastMove, finalCastlingRights)) {
+        stalemate = true
       }
     }
 
@@ -1234,6 +1235,9 @@ function App() {
     if (mate) {
       setGameOver(true)
       setWinner(currentTurn)
+    } else if (stalemate) {
+      setGameOver(true)
+      setWinner('draw')
     }
 
     if (isOnline) {
@@ -1242,11 +1246,11 @@ function App() {
         board: newBoard,
         turn: nextTurn,
         inCheck: check,
-        gameOver: mate,
-        winner: mate ? currentTurn : null,
+        gameOver: mate || stalemate,
+        winner: mate ? currentTurn : (stalemate ? 'draw' : null),
         captured: finalCaptured,
         lastMove: finalLastMove,
-        castlingRights: castlingRights
+        castlingRights: finalCastlingRights
       })
     }
   }
@@ -1341,7 +1345,7 @@ function App() {
         }
 
         // Commit Move
-        finalizeMove(tempBoard, turn, nextCaptured, moveData)
+        finalizeMove(tempBoard, turn, nextCaptured, moveData, newRights)
       }
     } else {
       // Select logic
@@ -1497,7 +1501,7 @@ function App() {
                 <h2 className="game-title">{THEMES[currentTheme].label}</h2>
                 <span style={{ fontSize: '0.9rem', opacity: 0.8, fontWeight: 'bold' }}>
                   {gameOver 
-                    ? `GAME OVER - ${winner.toUpperCase()} WINS!` 
+                    ? (winner === 'draw' ? 'GAME OVER - STALEMATE' : `GAME OVER - ${winner.toUpperCase()} WINS!`)
                     : inCheck 
                       ? `CHECK! (${turn.toUpperCase()}'S TURN)`
                       : `TURN: ${turn.toUpperCase()}`
@@ -1627,7 +1631,7 @@ function App() {
                      </>
                    ) : (
                      <>
-                       <h2 className="winner-text">{winner} WINS!</h2>
+                       <h2 className="winner-text">{winner === 'draw' ? 'STALEMATE' : `${winner} WINS!`}</h2>
                        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
                          <button className="start-btn" style={{ fontSize: '1rem', padding: '15px 30px' }} onClick={() => {
                            if (isOnline) {
