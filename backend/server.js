@@ -83,6 +83,10 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('rematch_rejected');
   });
 
+  socket.on('timeout', (data) => {
+    io.to(data.roomId).emit('receive_timeout', data);
+  });
+
   socket.on('disconnect', () => {
     console.log('User Disconnected', socket.id);
     // Optional: Handle cleanup if a user leaves mid-game
