@@ -287,6 +287,7 @@ function App() {
   const [creationColor, setCreationColor] = useState('white')
   const myColorRef = useRef(myColor)
   const roomIdRef = useRef(roomId)
+  const [timer, setTimer] = useState({ white: 600, black: 600 })
   
   // New State for Rules
   const [lastMove, setLastMove] = useState(null)
@@ -315,6 +316,7 @@ function App() {
     setGameOver(false)
     setWinner(null)
     setLastMove(null)
+    setTimer({ white: 600, black: 600 })
     setRematchStatus('none')
     setCastlingRights({
       white: { kingSide: true, queenSide: true },
@@ -324,6 +326,12 @@ function App() {
   }
 
   const theme = THEMES[currentTheme].colors
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
   // Dynamic CSS based on selected theme
   const styles = `
@@ -897,6 +905,24 @@ function App() {
       letter-spacing: 1px;
     }
 
+    .timer {
+      font-size: 1.2rem;
+      font-weight: 800;
+      padding: 8px 16px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      color: #fff;
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+    }
+    .timer.active {
+      background: var(--primary);
+      color: var(--bg-solid);
+      box-shadow: 0 0 15px var(--primary);
+      transform: scale(1.05);
+    }
+
     .chat-container {
       width: 100%;
       max-width: 600px;
@@ -1101,6 +1127,7 @@ function App() {
       setCaptured(data.captured)
       if (data.lastMove) setLastMove(data.lastMove)
       if (data.castlingRights) setCastlingRights(data.castlingRights)
+      if (data.timer) setTimer(data.timer)
     })
 
     socket.on('receive_message', (data) => {
@@ -1150,6 +1177,12 @@ function App() {
       resetGame()
     })
 
+    socket.on('receive_timeout', (data) => {
+      setGameOver(true)
+      setWinner(data.winner)
+      setGameStarted(true) // Ensure UI shows game over state
+    })
+
     return () => {
       socket.off('connect')
       socket.off('connect_error')
@@ -1165,6 +1198,7 @@ function App() {
       socket.off('rematch_request_received')
       socket.off('game_reset')
       socket.off('rematch_rejected')
+      socket.off('receive_timeout')
     }
   }, [])
 
@@ -1181,6 +1215,38 @@ function App() {
     }
     return () => clearTimeout(timer)
   }, [rematchStatus, roomId])
+
+  // Timer Logic
+  useEffect(() => {
+    if (!gameStarted || gameOver) return
+
+    const interval = setInterval(() => {
+      setTimer(prev => {
+        const next = { ...prev }
+        if (next[turn] > 0) {
+          next[turn] -= 1
+        }
+        return next
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [gameStarted, gameOver, turn])
+
+  // Check for Timeout
+  useEffect(() => {
+    if (gameOver) return
+    if (timer.white === 0) handleTimeout('black')
+    if (timer.black === 0) handleTimeout('white')
+  }, [timer, gameOver])
+
+  const handleTimeout = (winnerColor) => {
+    setGameOver(true)
+    setWinner(winnerColor)
+    if (isOnline) {
+      socket.emit('timeout', { roomId, winner: winnerColor })
+    }
+  }
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -1250,7 +1316,8 @@ function App() {
         winner: mate ? currentTurn : (stalemate ? 'draw' : null),
         captured: finalCaptured,
         lastMove: finalLastMove,
-        castlingRights: finalCastlingRights
+        castlingRights: finalCastlingRights,
+        timer: timer
       })
     }
   }
@@ -1501,7 +1568,7 @@ function App() {
                 <h2 className="game-title">{THEMES[currentTheme].label}</h2>
                 <span style={{ fontSize: '0.9rem', opacity: 0.8, fontWeight: 'bold' }}>
                   {gameOver 
-                    ? (winner === 'draw' ? 'GAME OVER - STALEMATE' : `GAME OVER - ${winner.toUpperCase()} WINS!`)
+                    ? (winner === 'draw' ? 'GAME OVER - STALEMATE' : `GAME OVER - ${winner.toUpperCase()} WINS!${timer[winner === 'white' ? 'black' : 'white'] === 0 ? ' (TIMEOUT)' : ''}`)
                     : inCheck 
                       ? `CHECK! (${turn.toUpperCase()}'S TURN)`
                       : `TURN: ${turn.toUpperCase()}`
@@ -1544,18 +1611,31 @@ function App() {
                   </div>
                 </div>
               )}
-              <div className="captured-area" style={{ marginBottom: '15px' }}>
-                {captured.black.map((p, i) => (
-                  <span key={i} className="captured-piece piece white">{p}</span>
-                ))}
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', width: '100%', maxWidth: '600px', margin: '0 auto 10px auto' }}>
+                <div className={`timer ${turn === 'black' ? 'active' : ''}`}>
+                  {formatTime(timer.black)}
+                </div>
+                <div className="captured-area" style={{ flex: 1, margin: '0 10px', background: 'rgba(0,0,0,0.2)' }}>
+                  {captured.black.map((p, i) => (
+                    <span key={i} className="captured-piece piece white">{p}</span>
+                  ))}
+                </div>
               </div>
+
               <div className="chess-board">
               {renderBoard()}
               </div>
-              <div className="captured-area" style={{ marginTop: '15px' }}>
-                {captured.white.map((p, i) => (
-                  <span key={i} className="captured-piece piece black">{p}</span>
-                ))}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', width: '100%', maxWidth: '600px', margin: '10px auto 0 auto' }}>
+                <div className={`timer ${turn === 'white' ? 'active' : ''}`}>
+                  {formatTime(timer.white)}
+                </div>
+                <div className="captured-area" style={{ flex: 1, margin: '0 10px', background: 'rgba(0,0,0,0.2)' }}>
+                  {captured.white.map((p, i) => (
+                    <span key={i} className="captured-piece piece black">{p}</span>
+                  ))}
+                </div>
               </div>
             </div>
             
