@@ -84,7 +84,66 @@ const isPathClear = (start, end, board) => {
   return true
 }
 
-const isValidMove = (start, end, board) => {
+// Helper to check basic attacks without recursion or full validation
+const canAttack = (start, end, board) => {
+  const piece = board[start.r][start.c]
+  const dr = end.r - start.r
+  const dc = end.c - start.c
+  const absDr = Math.abs(dr)
+  const absDc = Math.abs(dc)
+  
+  switch (piece.type) {
+    case '♟': 
+      const direction = piece.color === 'white' ? -1 : 1
+      return dr === direction && absDc === 1
+    case '♜':
+      if (dr !== 0 && dc !== 0) return false
+      return isPathClear(start, end, board)
+    case '♞':
+      return (absDr === 2 && absDc === 1) || (absDr === 1 && absDc === 2)
+    case '♝':
+      if (absDr !== absDc) return false
+      return isPathClear(start, end, board)
+    case '♛':
+      if (dr !== 0 && dc !== 0 && absDr !== absDc) return false
+      return isPathClear(start, end, board)
+    case '♚':
+      return absDr <= 1 && absDc <= 1
+    default:
+      return false
+  }
+}
+
+const isSquareUnderAttack = (board, r, c, defenderColor) => {
+  const attackerColor = defenderColor === 'white' ? 'black' : 'white'
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      const piece = board[i][j]
+      if (piece && piece.color === attackerColor) {
+        if (canAttack({r: i, c: j}, {r, c}, board)) return true
+      }
+    }
+  }
+  return false
+}
+
+const findKing = (board, color) => {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c]
+      if (p && p.type === '♚' && p.color === color) return { r, c }
+    }
+  }
+  return null
+}
+
+const isKingInCheck = (board, color) => {
+  const king = findKing(board, color)
+  if (!king) return false
+  return isSquareUnderAttack(board, king.r, king.c, color)
+}
+
+const isValidMove = (start, end, board, lastMove, castlingRights) => {
   const piece = board[start.r][start.c]
   const target = board[end.r][end.c]
   
@@ -105,6 +164,15 @@ const isValidMove = (start, end, board) => {
       if (dc === 0 && dr === 2 * direction && start.r === startRow && !target && !board[start.r + direction][start.c]) return true
       // Capture
       if (absDc === 1 && dr === direction && target && target.color !== piece.color) return true
+      // En Passant
+      if (absDc === 1 && dr === direction && !target && lastMove) {
+        const { from, to, piece: lp } = lastMove
+        if (lp.type === '♟' && lp.color !== piece.color && 
+            Math.abs(from.r - to.r) === 2 && 
+            to.r === start.r && to.c === end.c) {
+          return true
+        }
+      }
       return false
     }
     case '♜':
@@ -119,59 +187,46 @@ const isValidMove = (start, end, board) => {
       if (dr !== 0 && dc !== 0 && absDr !== absDc) return false
       return isPathClear(start, end, board)
     case '♚':
-      return absDr <= 1 && absDc <= 1
+      if (absDr <= 1 && absDc <= 1) return true
+      // Castling
+      if (dr === 0 && absDc === 2 && castlingRights) {
+        const rights = castlingRights[piece.color]
+        const row = piece.color === 'white' ? 7 : 0
+        if (start.r !== row || start.c !== 4) return false
+        if (isKingInCheck(board, piece.color)) return false
+        
+        if (dc === 2 && rights.kingSide) { // Kingside
+           if (board[row][5] || board[row][6]) return false
+           if (isSquareUnderAttack(board, row, 5, piece.color) || isSquareUnderAttack(board, row, 6, piece.color)) return false
+           return true
+        }
+        if (dc === -2 && rights.queenSide) { // Queenside
+           if (board[row][1] || board[row][2] || board[row][3]) return false
+           if (isSquareUnderAttack(board, row, 3, piece.color) || isSquareUnderAttack(board, row, 2, piece.color)) return false
+           return true
+        }
+      }
+      return false
     default:
       return false
   }
 }
 
-const findKing = (board, color) => {
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const p = board[r][c]
-      if (p && p.type === '♚' && p.color === color) return { r, c }
-    }
-  }
-  return null
-}
-
-const isSquareUnderAttack = (board, r, c, defenderColor) => {
-  const attackerColor = defenderColor === 'white' ? 'black' : 'white'
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 8; j++) {
-      const piece = board[i][j]
-      if (piece && piece.color === attackerColor) {
-        const start = { r: i, c: j }
-        const end = { r, c }
-        if (piece.type === '♟') {
-           const direction = piece.color === 'white' ? -1 : 1
-           const dr = r - i
-           const dc = c - j
-           if (dr === direction && Math.abs(dc) === 1) return true
-        } else {
-           if (isValidMove(start, end, board)) return true
-        }
-      }
-    }
-  }
-  return false
-}
-
-const isKingInCheck = (board, color) => {
-  const king = findKing(board, color)
-  if (!king) return false
-  return isSquareUnderAttack(board, king.r, king.c, color)
-}
-
-const hasLegalMoves = (board, color) => {
+const hasLegalMoves = (board, color, lastMove, castlingRights) => {
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const piece = board[r][c]
       if (piece && piece.color === color) {
         for (let tr = 0; tr < 8; tr++) {
           for (let tc = 0; tc < 8; tc++) {
-             if (isValidMove({r,c}, {r: tr, c: tc}, board)) {
+             if (isValidMove({r,c}, {r: tr, c: tc}, board, lastMove, castlingRights)) {
                const temp = board.map(row => row.map(p => p ? {...p} : null))
+               
+               // En Passant simulation
+               if (piece.type === '♟' && Math.abs(tc - c) === 1 && !temp[tr][tc]) {
+                 temp[r][tc] = null
+               }
+               
                temp[tr][tc] = temp[r][c]
                temp[r][c] = null
                if (!isKingInCheck(temp, color)) return true
@@ -184,14 +239,21 @@ const hasLegalMoves = (board, color) => {
   return false
 }
 
-const getValidMoves = (board, start, color) => {
+const getValidMoves = (board, start, color, lastMove, castlingRights) => {
   const moves = []
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const end = { r, c }
-      if (isValidMove(start, end, board)) {
+      if (isValidMove(start, end, board, lastMove, castlingRights)) {
         const temp = board.map(row => row.map(p => p ? { ...p } : null))
-        temp[r][c] = temp[start.r][start.c]
+        const piece = temp[start.r][start.c]
+        
+        // En Passant simulation
+        if (piece.type === '♟' && Math.abs(c - start.c) === 1 && !temp[r][c]) {
+             temp[start.r][c] = null
+        }
+
+        temp[r][c] = piece
         temp[start.r][start.c] = null
         if (!isKingInCheck(temp, color)) {
           moves.push(end)
@@ -223,6 +285,14 @@ function App() {
   const chatEndRef = useRef(null)
   const [copied, setCopied] = useState(false)
   const myColorRef = useRef(myColor)
+  
+  // New State for Rules
+  const [lastMove, setLastMove] = useState(null)
+  const [castlingRights, setCastlingRights] = useState({
+    white: { kingSide: true, queenSide: true },
+    black: { kingSide: true, queenSide: true }
+  })
+  const [promotionSquare, setPromotionSquare] = useState(null)
 
   useEffect(() => {
     myColorRef.current = myColor
@@ -890,6 +960,25 @@ function App() {
       -webkit-text-fill-color: transparent;
     }
 
+    .promotion-options {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .promotion-piece {
+      font-size: 3rem;
+      cursor: pointer;
+      padding: 10px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      transition: transform 0.2s;
+    }
+    .promotion-piece:hover {
+      transform: scale(1.2);
+      background: rgba(255,255,255,0.2);
+    }
+
     @media (max-width: 768px) {
       .container { padding: 10px; }
       h1 { font-size: 3rem; margin-bottom: 10px; }
@@ -952,6 +1041,8 @@ function App() {
       setGameOver(data.gameOver)
       setWinner(data.winner)
       setCaptured(data.captured)
+      if (data.lastMove) setLastMove(data.lastMove)
+      if (data.castlingRights) setCastlingRights(data.castlingRights)
     })
 
     socket.on('receive_message', (data) => {
@@ -993,8 +1084,62 @@ function App() {
     }
   }
 
+  const promotePawn = (type) => {
+    if (!promotionSquare) return
+    const { r, c } = promotionSquare
+    const newBoard = board.map(row => row.map(p => p ? { ...p } : null))
+    newBoard[r][c] = { type, color: turn }
+    
+    finalizeMove(newBoard, turn)
+    setPromotionSquare(null)
+  }
+
+  const finalizeMove = (newBoard, currentTurn) => {
+    const nextTurn = currentTurn === 'white' ? 'black' : 'white'
+    
+    // Check opponent status
+    const check = isKingInCheck(newBoard, nextTurn)
+    let mate = false
+    
+    if (check) {
+      if (!hasLegalMoves(newBoard, nextTurn, lastMove, castlingRights)) {
+        mate = true
+      }
+    } else {
+      // Stalemate check could go here
+      if (!hasLegalMoves(newBoard, nextTurn, lastMove, castlingRights)) {
+        // Stalemate logic (optional, for now just no moves but not check)
+      }
+    }
+
+    setBoard(newBoard)
+    setTurn(nextTurn)
+    setSelected(null)
+    setPossibleMoves([])
+    setInCheck(check)
+    
+    if (mate) {
+      setGameOver(true)
+      setWinner(currentTurn)
+    }
+
+    if (isOnline) {
+      socket.emit('move', {
+        roomId,
+        board: newBoard,
+        turn: nextTurn,
+        inCheck: check,
+        gameOver: mate,
+        winner: mate ? currentTurn : null,
+        captured: captured,
+        lastMove: lastMove,
+        castlingRights: castlingRights
+      })
+    }
+  }
+
   const handleSquareClick = (r, c) => {
-    if (gameOver) return
+    if (gameOver || promotionSquare) return
     
     // Online restriction: prevent moving if it's not your turn or not your color
     if (isOnline && (turn !== myColor || !opponentJoined)) return
@@ -1013,73 +1158,89 @@ function App() {
       // If clicked own piece, switch selection
       if (targetPiece && targetPiece.color === selectedPiece.color) {
         setSelected({ r, c })
-        setPossibleMoves(getValidMoves(board, {r, c}, turn))
+        setPossibleMoves(getValidMoves(board, {r, c}, turn, lastMove, castlingRights))
         return
       }
 
       // Move logic with validation
-      if (isValidMove(selected, { r, c }, board)) {
+      if (isValidMove(selected, { r, c }, board, lastMove, castlingRights)) {
         // Simulate move to check for self-check
         const tempBoard = board.map(row => row.map(p => p ? { ...p } : null))
+        
+        // Handle En Passant Capture
+        if (selectedPiece.type === '♟' && Math.abs(c - selected.c) === 1 && !targetPiece) {
+           // Remove captured pawn
+           tempBoard[selected.r][c] = null
+           // Add to captured list
+           const capturedPawnColor = turn === 'white' ? 'black' : 'white'
+           setCaptured(prev => ({
+             ...prev,
+             [turn]: [...prev[turn], '♟']
+           }))
+        }
+
+        // Handle Castling Move
+        if (selectedPiece.type === '♚' && Math.abs(c - selected.c) === 2) {
+           const row = selected.r
+           if (c > selected.c) { // Kingside
+             tempBoard[row][5] = tempBoard[row][7]
+             tempBoard[row][7] = null
+           } else { // Queenside
+             tempBoard[row][3] = tempBoard[row][0]
+             tempBoard[row][0] = null
+           }
+        }
+
         tempBoard[r][c] = tempBoard[selected.r][selected.c]
         tempBoard[selected.r][selected.c] = null
         
         if (isKingInCheck(tempBoard, turn)) return
 
-        // Check for capture
-        const capturedPiece = board[r][c]
-        let newCaptured = captured
-        if (capturedPiece) {
-          newCaptured = {
-            ...captured,
-            [turn]: [...captured[turn], capturedPiece.type]
-          }
-          setCaptured(newCaptured)
+        // Update Castling Rights
+        const newRights = { ...castlingRights }
+        if (selectedPiece.type === '♚') {
+           newRights[turn].kingSide = false
+           newRights[turn].queenSide = false
+        }
+        if (selectedPiece.type === '♜') {
+           if (selected.c === 0) newRights[turn].queenSide = false
+           if (selected.c === 7) newRights[turn].kingSide = false
+        }
+        // If rook is captured
+        if (targetPiece && targetPiece.type === '♜') {
+           if (c === 0) newRights[targetPiece.color].queenSide = false
+           if (c === 7) newRights[targetPiece.color].kingSide = false
+        }
+        setCastlingRights(newRights)
+
+        // Check for capture (standard)
+        if (targetPiece) {
+          setCaptured(prev => ({
+            ...prev,
+            [turn]: [...prev[turn], targetPiece.type]
+          }))
+        }
+
+        // Update Last Move
+        const moveData = { from: selected, to: { r, c }, piece: selectedPiece }
+        setLastMove(moveData)
+
+        // Check Promotion
+        if (selectedPiece.type === '♟' && (r === 0 || r === 7)) {
+           setBoard(tempBoard)
+           setPromotionSquare({ r, c })
+           return
         }
 
         // Commit Move
-        const newBoard = tempBoard
-        const nextTurn = turn === 'white' ? 'black' : 'white'
-        
-        // Check opponent status
-        const check = isKingInCheck(newBoard, nextTurn)
-        let mate = false
-        
-        if (check) {
-          if (!hasLegalMoves(newBoard, nextTurn)) {
-            mate = true
-          }
-        }
-
-        setBoard(newBoard)
-        setTurn(nextTurn)
-        setSelected(null)
-        setPossibleMoves([])
-        setInCheck(check)
-        
-        if (mate) {
-          setGameOver(true)
-          setWinner(turn)
-        }
-
-        if (isOnline) {
-          socket.emit('move', {
-            roomId,
-            board: newBoard,
-            turn: nextTurn,
-            inCheck: check,
-            gameOver: mate,
-            winner: mate ? turn : null,
-            captured: newCaptured
-          })
-        }
+        finalizeMove(tempBoard, turn)
       }
     } else {
       // Select logic
       const piece = board[r][c]
       if (piece && piece.color === turn && (!isOnline || myColor === turn)) {
         setSelected({ r, c })
-        setPossibleMoves(getValidMoves(board, {r, c}, turn))
+        setPossibleMoves(getValidMoves(board, {r, c}, turn, lastMove, castlingRights))
       }
     }
   }
@@ -1093,7 +1254,7 @@ function App() {
         const piece = board[r][c]
         const isSelected = selected?.r === r && selected?.c === c
         const isPossibleMove = possibleMoves.some(m => m.r === r && m.c === c)
-        const isCapture = isPossibleMove && board[r][c]
+        const isCapture = isPossibleMove && (board[r][c] || (selected && board[selected.r][selected.c].type === '♟' && Math.abs(c - selected.c) === 1 && !board[r][c])) // Highlight en passant as capture
         
         squares.push(
           <div 
@@ -1155,6 +1316,12 @@ function App() {
                 setMessages([])
                 setIsOnline(false)
                 setGameStarted(true)
+                setLastMove(null)
+                setCastlingRights({
+                  white: { kingSide: true, queenSide: true },
+                  black: { kingSide: true, queenSide: true }
+                })
+                setPromotionSquare(null)
               }}>
                 Play Local
               </button>
@@ -1287,6 +1454,21 @@ function App() {
               </div>
             )}
 
+            {promotionSquare && (
+              <div className="victory-overlay">
+                <div className="victory-modal">
+                  <h2 className="winner-text">Promote Pawn</h2>
+                  <div className="promotion-options">
+                    {['♛', '♜', '♝', '♞'].map(p => (
+                      <div key={p} className="promotion-piece" onClick={() => promotePawn(p)}>
+                        <span className={`piece ${turn}`}>{p}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {gameOver && (
               <div className="victory-overlay">
                 <div className="victory-modal">
@@ -1302,6 +1484,12 @@ function App() {
                       setGameOver(false)
                       setWinner(null)
                       setMessages([])
+                      setLastMove(null)
+                      setCastlingRights({
+                        white: { kingSide: true, queenSide: true },
+                        black: { kingSide: true, queenSide: true }
+                      })
+                      setPromotionSquare(null)
                       if (isOnline) {
                         // Logic to restart online game would go here (e.g. emit 'rematch')
                       }
