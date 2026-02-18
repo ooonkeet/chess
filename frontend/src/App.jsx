@@ -286,9 +286,15 @@ function App() {
   const [copied, setCopied] = useState(false)
   const [creationColor, setCreationColor] = useState('white')
   const myColorRef = useRef(myColor)
+  const roomIdRef = useRef(roomId)
   
   // New State for Rules
   const [lastMove, setLastMove] = useState(null)
+  const [rematchStatus, setRematchStatus] = useState('none') // 'none', 'requested', 'received'
+  
+  useEffect(() => {
+    roomIdRef.current = roomId
+  }, [roomId])
   const [castlingRights, setCastlingRights] = useState({
     white: { kingSide: true, queenSide: true },
     black: { kingSide: true, queenSide: true }
@@ -309,6 +315,7 @@ function App() {
     setGameOver(false)
     setWinner(null)
     setLastMove(null)
+    setRematchStatus('none')
     setCastlingRights({
       white: { kingSide: true, queenSide: true },
       black: { kingSide: true, queenSide: true }
@@ -1122,6 +1129,27 @@ function App() {
       setIsOnline(false)
     })
 
+    socket.on('rematch_request_received', () => {
+      setRematchStatus(prev => {
+        if (prev === 'requested') {
+          socket.emit('accept_rematch', roomIdRef.current)
+          return 'requested'
+        }
+        return 'received'
+      })
+    })
+
+    socket.on('game_reset', () => {
+      resetGame()
+    })
+
+    socket.on('rematch_rejected', () => {
+      alert('Opponent declined the rematch.')
+      setGameStarted(false)
+      setIsOnline(false)
+      resetGame()
+    })
+
     return () => {
       socket.off('connect')
       socket.off('connect_error')
@@ -1134,8 +1162,25 @@ function App() {
       socket.off('error')
       socket.off('room_full')
       socket.off('invalid_room')
+      socket.off('rematch_request_received')
+      socket.off('game_reset')
+      socket.off('rematch_rejected')
     }
   }, [])
+
+  useEffect(() => {
+    let timer
+    if (rematchStatus === 'received') {
+      timer = setTimeout(() => {
+        socket.emit('reject_rematch', roomId)
+        setGameStarted(false)
+        setIsOnline(false)
+        setMessages([])
+        resetGame()
+      }, 120000) // 2 minutes
+    }
+    return () => clearTimeout(timer)
+  }, [rematchStatus, roomId])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -1554,27 +1599,59 @@ function App() {
             {gameOver && (
               <div className="victory-overlay">
                 <div className="victory-modal">
-                  <h2 className="winner-text">{winner} WINS!</h2>
-                  <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
-                    <button className="start-btn" style={{ fontSize: '1rem', padding: '15px 30px' }} onClick={() => {
-                      resetGame()
-                      setMessages([])
-                      if (isOnline) {
-                        // Logic to restart online game would go here (e.g. emit 'rematch')
-                      }
-                    }}>
-                      Play Again
-                    </button>
-                    <button className="theme-btn" onClick={() => {
-                      setGameStarted(false)
-                      setIsOnline(false)
-                      setMessages([])
-                      resetGame()
-                      socket.disconnect()
-                    }}>
-                      Exit Menu
-                    </button>
-                  </div>
+                   {rematchStatus === 'requested' ? (
+                     <>
+                       <h2 className="winner-text" style={{ fontSize: '2rem' }}>Waiting for Opponent...</h2>
+                       <div className="shape shape-1" style={{ position: 'relative', margin: '20px auto' }}></div>
+                     </>
+                   ) : rematchStatus === 'received' ? (
+                     <>
+                       <h2 className="winner-text" style={{ fontSize: '2rem' }}>Opponent wants a rematch!</h2>
+                       <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                         <button className="start-btn" style={{ fontSize: '1rem', padding: '15px 30px' }} onClick={() => {
+                           socket.emit('accept_rematch', roomId)
+                         }}>
+                           Accept
+                         </button>
+                         <button className="theme-btn" onClick={() => {
+                           socket.emit('reject_rematch', roomId)
+                           setGameStarted(false)
+                           setIsOnline(false)
+                           setMessages([])
+                           resetGame()
+                           socket.disconnect()
+                         }}>
+                           Reject
+                         </button>
+                       </div>
+                     </>
+                   ) : (
+                     <>
+                       <h2 className="winner-text">{winner} WINS!</h2>
+                       <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                         <button className="start-btn" style={{ fontSize: '1rem', padding: '15px 30px' }} onClick={() => {
+                           if (isOnline) {
+                             socket.emit('request_rematch', roomId)
+                             setRematchStatus('requested')
+                           } else {
+                             resetGame()
+                             setMessages([])
+                           }
+                         }}>
+                           Play Again
+                         </button>
+                         <button className="theme-btn" onClick={() => {
+                           setGameStarted(false)
+                           setIsOnline(false)
+                           setMessages([])
+                           resetGame()
+                           socket.disconnect()
+                         }}>
+                           Exit Menu
+                         </button>
+                       </div>
+                     </>
+                   )}
                 </div>
               </div>
             )}
