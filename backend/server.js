@@ -71,6 +71,18 @@ io.on('connection', (socket) => {
     io.to(data.roomId).emit('receive_message', data);
   });
 
+  socket.on('request_rematch', (roomId) => {
+    socket.to(roomId).emit('rematch_request_received');
+  });
+
+  socket.on('accept_rematch', (roomId) => {
+    io.to(roomId).emit('game_reset');
+  });
+
+  socket.on('reject_rematch', (roomId) => {
+    socket.to(roomId).emit('rematch_rejected');
+  });
+
   socket.on('disconnect', () => {
     console.log('User Disconnected', socket.id);
     // Optional: Handle cleanup if a user leaves mid-game
